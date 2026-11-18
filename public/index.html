@@ -1,164 +1,101 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#ffffff">
     <title>Ollama Chat</title>
-
     <link rel="stylesheet" href="styles.css">
 </head>
-
 <body>
-
     <div class="app">
-
-        <header class="header">
-
-            <div>
-                <h1>Local AI Chat</h1>
-                <p>Powered by Ollama</p>
+        <header class="topbar">
+            <div class="topbar-left">
+                <button type="button" id="new-chat" class="icon-button" aria-label="New chat" title="New chat">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                </button>
+                <div class="model-control">
+                    <select id="model-select" aria-label="Choose model">
+                        <option>Loading models...</option>
+                    </select>
+                    <svg class="chevron" viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5" /></svg>
+                </div>
             </div>
 
-            <button id="new-chat">
-                New Chat
-            </button>
+            <details class="options-menu">
+                <summary aria-label="Chat options">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
+                    <span>Options</span>
+                </summary>
+                <div class="advanced-controls">
+                    <div class="setting-field">
+                        <label for="system-prompt">System prompt</label>
+                        <textarea id="system-prompt" rows="3" placeholder="Define your assistant's behaviour..."></textarea>
+                    </div>
 
+                    <div class="setting-field">
+                        <label for="temperature">Temperature <span id="temperature-value">0.7</span></label>
+                        <input type="range" id="temperature" min="0" max="1" step="0.1" value="0.7">
+                    </div>
+
+                    <div class="setting-field">
+                        <label for="num-ctx">Context size <span id="num-ctx-value">2048</span></label>
+                        <input type="range" id="num-ctx" min="512" max="8192" step="512" value="2048">
+                        <small>Larger context sizes use more memory.</small>
+                    </div>
+                </div>
+            </details>
         </header>
 
-        <section class="toolbar">
-
-            <div class="model-control">
-
-                <label for="model-select">
-                    Model
-                </label>
-
-                <select id="model-select">
-                    <option>Loading models...</option>
-                </select>
-
-            </div>
-
-            <label
-                id="think-control"
-                class="think-control"
-                hidden
-            >
-                <input
-                    type="checkbox"
-                    id="think-toggle"
-                >
-
-                Enable reasoning
-            </label>
-
-            <div class="advanced-controls">
-
-                <label for="system-prompt">
-                    System prompt
-                </label>
-
-                <textarea
-                    id="system-prompt"
-                    rows="2"
-                    placeholder="Define your AI assistant's behaviour..."
-                ></textarea>
-
-                <label for="temperature">
-                    Temperature:
-                    <span id="temperature-value">0.7</span>
-                </label>
-
-                <input
-                    type="range"
-                    id="temperature"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                    value="0.7"
-                >
-
-                <label for="num-ctx">
-                    Context size:
-                    <span id="num-ctx-value">2048</span>
-                    <small>(larger values use more memory)</small>
-                </label>
-
-                <input
-                    type="range"
-                    id="num-ctx"
-                    min="512"
-                    max="8192"
-                    step="512"
-                    value="2048"
-                >
-
-            </div>
-
-        </section>
-
-        <main id="messages" class="messages">
-
+        <main id="messages" class="messages" aria-live="polite">
             <div class="welcome">
-                <h2>Welcome!</h2>
-
-                <p>
-                    Ask your local AI assistant anything.
-                </p>
+                <h1>How can I help?</h1>
+                <p>Chat with a model running locally on your device.</p>
             </div>
-
         </main>
 
-        <div id="status" class="status"></div>
+        <footer class="composer-dock">
+            <div id="status" class="status" role="status" aria-live="polite"></div>
+            <form id="chat-form" class="chat-form">
+                <textarea
+                    id="message-input"
+                    placeholder="Message your local model"
+                    rows="1"
+                    maxlength="8000"
+                    aria-label="Message"
+                ></textarea>
 
-        <form id="chat-form" class="chat-form">
+                <div class="composer-tools">
+                    <div class="tool-actions">
+                        <div id="think-control" hidden>
+                            <button type="button" id="think-toggle" class="tool-button" aria-pressed="false" title="Toggle reasoning">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.5 6 5.5 3-5.5 2-1.5 7-1.5-7L5 12l5.5-3L12 3Z"/><path d="m19 3 .7 2.3L22 6l-2.3.7L19 9l-.7-2.3L16 6l2.3-.7L19 3Z"/></svg>
+                                <span>Think</span>
+                            </button>
+                        </div>
 
-            <div id="image-control" class="image-control" hidden>
-                <label for="image-input">Attach an image (vision model, max 3 MB)</label>
-                <input
-                    type="file"
-                    id="image-input"
-                    accept="image/*"
-                >
-                <span id="image-status" aria-live="polite"></span>
-            </div>
+                        <div id="image-control" hidden>
+                            <input type="file" id="image-input" accept="image/*" hidden>
+                            <button type="button" id="attach-button" class="tool-button" title="Attach image (max 3 MB)" aria-label="Attach image, maximum 3 megabytes">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 12.5 6.6-6.6a3.2 3.2 0 0 1 4.5 4.5l-8.7 8.7a5 5 0 0 1-7.1-7.1l8.2-8.2"/></svg>
+                            </button>
+                            <span id="image-status" aria-live="polite"></span>
+                        </div>
+                    </div>
 
-            <textarea
-                id="message-input"
-                placeholder="Type your message..."
-                rows="2"
-            ></textarea>
-
-            <div class="actions">
-
-                <button
-                    type="button"
-                    id="stop-button"
-                    disabled
-                >
-                    Stop
-                </button>
-
-                <button
-                    type="submit"
-                    id="send-button"
-                >
-                    Send
-                </button>
-
-            </div>
-
-        </form>
-
+                    <button type="submit" id="send-button" class="send-button" aria-label="Send message" title="Send message">
+                        <svg class="send-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
+                        <svg class="stop-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                    </button>
+                </div>
+            </form>
+            <p class="composer-note">Local model responses can be inaccurate.</p>
+        </footer>
     </div>
 
+    <!-- Model output is converted to Markdown, then sanitized before display. -->
+    <script src="/vendor/marked/marked.umd.js"></script>
+    <script src="/vendor/dompurify/purify.min.js"></script>
     <script src="script.js"></script>
-
 </body>
 </html>

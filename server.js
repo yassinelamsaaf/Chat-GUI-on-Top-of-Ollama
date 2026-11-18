@@ -15,6 +15,10 @@ const DEFAULT_MODEL = "gemma4:e2b";
 app.use(express.json({ limit: "8mb" }));
 app.use(express.static("public"));
 
+// Serve only the browser-ready builds of the Markdown and sanitizing libraries.
+app.use("/vendor/marked", express.static("node_modules/marked/lib"));
+app.use("/vendor/dompurify", express.static("node_modules/dompurify/dist"));
+
 // Limit API traffic to 20 requests per client during each one-minute window.
 // This in-memory limiter is suitable for a local demo; a multi-server app
 // should use authenticated per-user limits and a shared rate-limit store.

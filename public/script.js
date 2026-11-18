@@ -15,9 +15,6 @@ const messageInput =
 const sendButton =
     document.getElementById("send-button");
 
-const stopButton =
-    document.getElementById("stop-button");
-
 const newChatButton =
     document.getElementById("new-chat");
 
@@ -51,6 +48,9 @@ const imageControl =
 
 const imageInput =
     document.getElementById("image-input");
+
+const attachButton =
+    document.getElementById("attach-button");
 
 const imageStatus =
     document.getElementById("image-status");
@@ -100,7 +100,7 @@ function addMessage(role, content = "") {
 
     contentElement.className = "message-content";
 
-    // Never interpret model output as HTML
+    // User text remains plain text; only assistant Markdown uses the renderer.
     contentElement.textContent = content;
 
     messageElement.appendChild(roleElement);
@@ -117,6 +117,17 @@ function addMessage(role, content = "") {
     };
 }
 
+// Model output is untrusted: sanitize the HTML produced from Markdown to
+// prevent injected scripts or event handlers from running in the browser.
+function renderAssistantMarkdown(element, markdown) {
+    const generatedHtml = marked.parse(markdown, {
+        gfm: true,
+        breaks: true
+    });
+
+    element.innerHTML = DOMPurify.sanitize(generatedHtml);
+}
+
 
 // ===============================
 // UI STATE
@@ -128,15 +139,22 @@ function setGenerating(value) {
 
     messageInput.disabled = value;
     modelSelect.disabled = value;
-    sendButton.disabled = value;
     newChatButton.disabled = value;
 
-    stopButton.disabled = !value;
     thinkToggle.disabled = value;
     systemPromptInput.disabled = value;
     temperatureInput.disabled = value;
     contextSizeInput.disabled = value;
     imageInput.disabled = value || !supportsImageInput();
+    attachButton.disabled = value || !supportsImageInput();
+
+    // The same round button sends a message or stops the active generation.
+    sendButton.classList.toggle("is-generating", value);
+    sendButton.setAttribute(
+        "aria-label",
+        value ? "Stop generating" : "Send message"
+    );
+    sendButton.title = value ? "Stop generating" : "Send message";
 }
 
 
@@ -208,13 +226,15 @@ function updateThinkingControl() {
     thinkControl.hidden = !supportsThinking;
 
     if (!supportsThinking) {
-        thinkToggle.checked = false;
+        thinkToggle.setAttribute("aria-pressed", "false");
+        thinkToggle.classList.remove("is-active");
     }
 
     // Image input is shown only when the selected model advertises vision.
     const supportsVision = capabilities.includes("vision");
     imageControl.hidden = !supportsVision;
     imageInput.disabled = isGenerating || !supportsVision;
+    attachButton.disabled = isGenerating || !supportsVision;
 
     if (!supportsVision) {
         selectedImage = null;
@@ -282,12 +302,43 @@ imageInput.addEventListener("change", () => {
             base64,
             previewUrl: reader.result
         };
-        imageStatus.textContent = `Attached: ${file.name}`;
+        imageStatus.textContent = file.name;
     });
     reader.addEventListener("error", () => {
         imageStatus.textContent = "Could not read this image.";
     });
     reader.readAsDataURL(file);
+});
+
+// Open the native image picker from the paperclip control beside Send.
+attachButton.addEventListener("click", () => imageInput.click());
+
+// Thinking is a model option that can be toggled directly from the composer.
+thinkToggle.addEventListener("click", () => {
+    const active = thinkToggle.getAttribute("aria-pressed") !== "true";
+    thinkToggle.setAttribute("aria-pressed", String(active));
+    thinkToggle.classList.toggle("is-active", active);
+});
+
+// Let the composer grow with the draft, then scroll inside it after the cap.
+function resizeMessageInput() {
+    const maxHeight = 180;
+    messageInput.style.height = "auto";
+    const nextHeight = Math.min(messageInput.scrollHeight, maxHeight);
+    messageInput.style.height = `${nextHeight}px`;
+    messageInput.style.overflowY =
+        messageInput.scrollHeight > maxHeight ? "auto" : "hidden";
+}
+
+messageInput.addEventListener("input", resizeMessageInput);
+resizeMessageInput();
+
+// Enter sends like a chat composer; Shift+Enter keeps a line break.
+messageInput.addEventListener("keydown", event => {
+    if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        chatForm.requestSubmit();
+    }
 });
 
 
@@ -451,7 +502,8 @@ async function sendMessage(text, image = null) {
         };
 
         if (supportsThinking) {
-            requestBody.think = thinkToggle.checked;
+            requestBody.think =
+                thinkToggle.getAttribute("aria-pressed") === "true";
         }
 
         const response = await fetch("/api/chat", {
@@ -497,7 +549,7 @@ async function sendMessage(text, image = null) {
 
                 answer += chunk.message.content;
 
-                contentElement.textContent = answer;
+                renderAssistantMarkdown(contentElement, answer);
 
                 messagesContainer.scrollTop =
                     messagesContainer.scrollHeight;
@@ -583,6 +635,12 @@ chatForm.addEventListener(
 
         event.preventDefault();
 
+        // While generating, the send control becomes the stop control.
+        if (isGenerating) {
+            activeController?.abort();
+            return;
+        }
+
         const text = messageInput.value.trim();
         const image = selectedImage;
 
@@ -591,6 +649,7 @@ chatForm.addEventListener(
         }
 
         messageInput.value = "";
+        resizeMessageInput();
         selectedImage = null;
         imageInput.value = "";
         imageStatus.textContent = "";
@@ -598,21 +657,6 @@ chatForm.addEventListener(
         await sendMessage(text, image);
     }
 );
-
-
-// ===============================
-// STOP GENERATION
-// ===============================
-
-stopButton.addEventListener("click", () => {
-
-    if (activeController) {
-
-        activeController.abort();
-
-    }
-
-});
 
 
 // ===============================
